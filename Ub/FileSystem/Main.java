@@ -1,5 +1,4 @@
 import java.util.*; // import utility classes
-
 class Directory{
     private String name; // directory name
     Directory parent; // parent directory reference
@@ -10,24 +9,13 @@ class Directory{
     public void addChild(Directory dir){dir.parent=this;children.put(dir.getName(),dir);} // add child directory
 }
 class FileSystem{
-    private static volatile FileSystem instance; // singleton instance
     private Directory root; // root directory
     private Directory current; // current working directory
     private final Object lock=new Object(); // lock for thread safety
-    private FileSystem(){
+    public FileSystem(){
         this.root=new Directory("/"); // create root
         this.root.parent=root; // root parent points to itself
         this.current=root; // initialize current to root
-    }
-    public static FileSystem getInstance(){ // double checked locking singleton
-        if(instance==null){
-            synchronized(FileSystem.class){
-                if(instance==null){
-                    instance=new FileSystem();
-                }
-            }
-        }
-        return instance;
     }
     private String[] parsePath(String path){ // split path into components
         if(path==null||path.isEmpty())return new String[0]; // handle empty
@@ -38,12 +26,20 @@ class FileSystem{
         }
         return result.toArray(new String[0]); // convert to array
     }
+    // ================= SIMPLE * WILDCARD RESOLVER =================
+    // supports only "*" → match all children
+    // if exactly one child → navigate
+    // if multiple children → ambiguous → fail
     private Directory resolveWildcard(Directory dir,String pattern){ // simple wildcard resolver
-        if("*".equals(pattern)){ // wildcard match
-            if(dir.children.size()==1)return dir.children.firstEntry().getValue(); // single match allowed
-            return null; // ambiguous or no match
-        }
-        return null; // unsupported pattern
+        if(!"*".equals(pattern))return null; // only support *
+        if(dir.children.isEmpty())return null; // no match
+        if(dir.children.size()==1) // single match allowed
+            return dir.children.firstEntry().getValue();
+        // multiple matches → ambiguous
+        System.out.println("Ambiguous wildcard. Possible matches:");
+        for(String name:dir.children.keySet()) // show available options
+            System.out.println(name);
+        return null; // ambiguous case
     }
     private Directory navigateTo(Directory start,String[] parts,boolean createIfNotExist){ // navigate helper
         Directory temp=start; // start traversal from given directory
@@ -107,9 +103,10 @@ class FileSystem{
         }
     }
 }
+// ================= DRIVER =================
 public class Main{
     public static void main(String[] args){
-        FileSystem fs=FileSystem.getInstance(); // get singleton instance
+        FileSystem fs=new FileSystem(); // create filesystem instance
         fs.mkdir("/a/b/c"); // create nested directories
         fs.mkdir("/a/b/d"); // create another branch
         fs.cd("/a/b"); // change directory
