@@ -36,15 +36,15 @@ class Job{
 interface MachineSelectionStrategy{
     Machine select(List<Machine> machines); // select best machine
 }
-// ================= STRATEGY: MOST FINISHED JOBS =================
-class MostFinishedJobsStrategy implements MachineSelectionStrategy{
+// ================= STRATEGY: MINIMUM UNFINISHED JOBS =================
+class MinimumUnfinishedJobsStrategy implements MachineSelectionStrategy{
     // Time Complexity: O(M)
     public Machine select(List<Machine> machines){
         Machine best=null; // best machine
         for(Machine m:machines){ // iterate machines
             if(best==null || // first candidate
-               m.finishedJobs>best.finishedJobs || // more completed jobs
-               (m.finishedJobs==best.finishedJobs && // tie → lexicographic order
+               m.unfinishedJobs<best.unfinishedJobs || // pick least running jobs
+               (m.unfinishedJobs==best.unfinishedJobs && // tie → lexicographic order
                 m.machineId.compareTo(best.machineId)<0))
                 best=m;
         }
@@ -60,7 +60,7 @@ class Scheduler{
         machines=new HashMap<>(); // initialize machines
         jobs=new HashMap<>(); // initialize jobs
         strategies=new HashMap<>(); // initialize strategies
-        strategies.put(1,new MostFinishedJobsStrategy()); // register only criteria 1
+        strategies.put(1,new MinimumUnfinishedJobsStrategy()); // register criteria 1 → least loaded strategy
     }
     // ================= ADD MACHINE =================
     // Time Complexity: O(C)
@@ -83,7 +83,6 @@ class Scheduler{
         jobs.put(jobId,new Job(jobId,selected)); // store job
         return selected.machineId; // return machine id
     }
-
     // ================= JOB COMPLETED =================
     // Time Complexity: O(1)
     public void jobCompleted(String jobId){
@@ -94,24 +93,18 @@ class Scheduler{
         m.finishedJobs++; // increase completed jobs
     }
 }
-
 // ================= DRIVER =================
 public class Main{
     public static void main(String[] args){
-
         Scheduler scheduler=new Scheduler(); // create scheduler
-
         scheduler.addMachine("machineA",
                 new String[]{"image compression"}); // add machine A
-
         scheduler.addMachine("machineB",
                 new String[]{"image compression"}); // add machine B
-
         String assigned=scheduler.assignMachineToJob(
                 "job1",
                 new String[]{"image compression"},
-                1); // use most finished jobs strategy
-
+                1); // use minimum unfinished jobs strategy
         System.out.println(assigned); // print assigned machine
     }
 }
