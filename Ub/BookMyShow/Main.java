@@ -1,15 +1,18 @@
 import java.util.*; // import utilities
+// ================= SEAT STATUS =================
 enum SeatStatus{AVAILABLE,RESERVED,BOOKED} // define seat states
+// ================= SEAT =================
 class Seat{
     private String seatId; // unique seat id
     private SeatStatus status; // current status
     public Seat(String seatId){this.seatId=seatId;this.status=SeatStatus.AVAILABLE;} // constructor
     public String getSeatId(){return seatId;} // return seat id
-    public SeatStatus getStatus(){return status;} // return seat status
+    public SeatStatus getStatus(){return status;} // return seat status\
     public void reserve(){this.status=SeatStatus.RESERVED;} // mark as reserved
     public void book(){this.status=SeatStatus.BOOKED;} // mark as booked
     public void makeAvailable(){this.status=SeatStatus.AVAILABLE;} // reset seat
 }
+// ================= SHOW =================
 class Show{
     private String showId; // show identifier
     private long timestamp; // show start time epoch
@@ -30,6 +33,7 @@ class Show{
     public Screen getScreen(){return screen;} // return screen
     public Seat getSeatById(String seatId){return seatMap.get(seatId);} // O(1) seat lookup
 }
+// ================= SCREEN =================
 class Screen{
     private String screenId; // screen id
     private List<Show> shows; // list of shows
@@ -38,6 +42,7 @@ class Screen{
     public String getScreenId(){return screenId;} // return screen id
     public List<Show> getShows(){return shows;} // return shows
 }
+// ================= RESERVATION =================
 class Reservation{
     private String reservationId; // reservation id
     private String userId; // user id
@@ -53,9 +58,26 @@ class Reservation{
     public List<Seat> getSeats(){return seats;} // return reserved seats
     public long getCreatedAt(){return createdAt;} // return creation time
 }
+// ================= TICKET =================
+class Ticket{
+    private String ticketId; // ticket id
+    private String reservationId; // reservation reference
+    private List<Seat> seats; // booked seats
+    private double totalPrice; // total cost
+    public Ticket(String ticketId,String reservationId,List<Seat> seats,double totalPrice){
+        this.ticketId=ticketId; // assign id
+        this.reservationId=reservationId; // assign reservation
+        this.seats=seats; // assign seats
+        this.totalPrice=totalPrice; // assign price
+    }
+    public String getTicketId(){return ticketId;} // return ticket id
+    public double getTotalPrice(){return totalPrice;} // return price
+}
+// ================= SEAT ALLOCATION STRATEGY =================
 interface SeatAllocationStrategy{
     List<Seat> allocate(List<Seat> seats,int count); // allocation contract
 }
+// ================= FIRST AVAILABLE STRATEGY =================
 class FirstAvailableStrategy implements SeatAllocationStrategy{
     public List<Seat> allocate(List<Seat> seats,int count){ // O(N)
         List<Seat> allocated=new ArrayList<>(); // store allocated seats
@@ -69,15 +91,34 @@ class FirstAvailableStrategy implements SeatAllocationStrategy{
         return allocated; // return allocated seats
     }
 }
+// ================= PRICING STRATEGY =================
+interface PricingStrategy{
+    double calculatePrice(int seatCount); // pricing contract
+}
+// ================= FLAT PRICING STRATEGY =================
+class FlatPricingStrategy implements PricingStrategy{
+    private double pricePerSeat; // fixed price per seat
+    public FlatPricingStrategy(double pricePerSeat){
+        this.pricePerSeat=pricePerSeat; // assign price
+    }
+    public double calculatePrice(int seatCount){ // O(1)
+        return seatCount*pricePerSeat; // total price
+    }
+}
+// ================= BOOK MY SHOW SERVICE =================
 class BookMyShow{
     private Show show; // show reference
     private Map<String,Reservation> reservations; // active reservations
-    private SeatAllocationStrategy strategy; // seat strategy
+    private SeatAllocationStrategy strategy; // seat allocation strategy
+    private PricingStrategy pricingStrategy; // pricing strategy
+    private Map<String,Ticket> tickets; // generated tickets
     private static final long RESERVATION_TIMEOUT=5*60*1000; // 5 minutes expiry
     public BookMyShow(Show show){
         this.show=show; // assign show
         this.reservations=new HashMap<>(); // initialize map
-        this.strategy=new FirstAvailableStrategy(); // set default strategy
+        this.strategy=new FirstAvailableStrategy(); // set default seat strategy
+        this.pricingStrategy=new FlatPricingStrategy(200); // fixed price per seat
+        this.tickets=new HashMap<>(); // initialize ticket store
     }
     private synchronized void cleanupExpiredReservations(){ // lazy cleanup
         long now=System.currentTimeMillis(); // current time
@@ -105,8 +146,12 @@ class BookMyShow{
         Reservation reservation=reservations.get(reservationId); // fetch reservation
         if(reservation==null){System.out.println("Invalid reservation");return;} // validation
         for(Seat seat:reservation.getSeats())seat.book(); // mark booked
-        reservations.remove(reservationId); // remove after confirmation
-        System.out.println("Booking confirmed"); // confirmation
+        double price=pricingStrategy.calculatePrice(reservation.getSeats().size()); // calculate price
+        String ticketId=UUID.randomUUID().toString(); // generate ticket id
+        Ticket ticket=new Ticket(ticketId,reservationId,reservation.getSeats(),price); // create ticket
+        tickets.put(ticketId,ticket); // store ticket
+        reservations.remove(reservationId); // remove reservation
+        System.out.println("Booking confirmed. TicketId:"+ticketId+" Total Price:"+price); // confirmation
     }
     public synchronized void cancel(String reservationId){ // O(K)
         cleanupExpiredReservations(); // cleanup before cancel
@@ -117,19 +162,26 @@ class BookMyShow{
         System.out.println("Reservation cancelled"); // confirmation
     }
 }
+// ================= DRIVER =================
 public class Main{
     public static void main(String[] args){
         Screen screen1=new Screen("Screen1"); // create screen
         List<Seat> seats=new ArrayList<>(); // create seat list
         for(int i=1;i<=8;i++){seats.add(new Seat("S"+i));} // create seats
-        Show show=new Show("Show1",System.currentTimeMillis(),seats,screen1); // create show with timestamp
+
+        Show show=new Show("Show1",System.currentTimeMillis(),seats,screen1); // create show
         screen1.addShow(show); // attach show to screen
+
         BookMyShow service=new BookMyShow(show); // create service for show
+
         String r1=service.reserve("User1",3); // reserve seats
         System.out.println("ReservationId:"+r1); // print id
+
         service.confirm(r1); // confirm booking
+
         String r2=service.reserve("User2",2); // reserve more seats
         System.out.println("ReservationId:"+r2); // print id
+
         service.cancel(r2); // cancel booking
     }
 }
